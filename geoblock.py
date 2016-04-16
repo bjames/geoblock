@@ -1,7 +1,4 @@
-import urllib
-
-
-
+import urllib, netaddr
 
 RIRS = ["afrinic", "apnic", "lacnic", "ripe", "arin"]
 
@@ -47,7 +44,7 @@ def read_files():
 
                         # curr_line[1] is the country code, curr_line[3] is the ip address (network id), curr_line[4] is the count of address (not always CIDR) see: https://www.apnic.net/publications/media-library/documents/resource-guidelines/rir-statistics-exchange-format
                         # readability: country_ip[country_code][1st_ipv4_address]=[num_addresses_in_range]
-                        country_ip[curr_line[1]][curr_line[3]] = curr_line[4]
+                        country_ip[curr_line[1]][int(netaddr.IPAddress(curr_line[3]))] = int(curr_line[4])
 
                     # case if we do not yet have the country code in our nested dict
                     else:
@@ -55,11 +52,11 @@ def read_files():
                         # this creates our first key-value pair for the nested dict of the current country, which tells
                         # the Python interpreter that we are creating a dictonary
                         # readability: country_ip[country_code]={1st_ipv4_address:num_addresses_in_range]
-                        country_ip[curr_line[1]]={curr_line[3]:curr_line[4]}
+                        country_ip[curr_line[1]]={int(netaddr.IPAddress(curr_line[3])):int(curr_line[4])}
 
             except IndexError:
 
-                print "Most likely we are in a region of the file we don't need data from anyways, proceed\n"
+                print "We are in a region of the file we don't need data from anyways, proceed\n"
 
     print "Finished reading files"
 
