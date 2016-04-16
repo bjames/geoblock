@@ -19,8 +19,13 @@ def read_files():
 
     print "Reading files into dictionary\n"
 
-    # TODO
-    # Read files into a datastructure, maybe a dictonary?
+    # Reads file contents into a nested dictionary
+    # The form of the dictionary is {Key_1, {Key_2: Value}}
+    # where Key_1 is the Country Code, Key_2 is the IP Address as an integer
+    # and the value is the number of IP address in the range
+    # ex {'us', {823564: 1024}} Note: Those are just random numbers I typed
+    # Worth mentioning is that the number of addresses may not always be a power of 2
+    # more info on the file structure here: https://www.apnic.net/publications/media-library/documents/resource-guidelines/rir-statistics-exchange-format
 
     # list containing our file objects
     file_list = []
@@ -42,7 +47,8 @@ def read_files():
                     # case if the country is already in the dict, we do not want to overwrite any keys
                     if country_ip.has_key(curr_line[1]):
 
-                        # curr_line[1] is the country code, curr_line[3] is the ip address (network id), curr_line[4] is the count of address (not always CIDR) see: https://www.apnic.net/publications/media-library/documents/resource-guidelines/rir-statistics-exchange-format
+                        # curr_line[1] is the country code, curr_line[3] is the ip address (network id), curr_line[4]
+                        # is the count of address (not always CIDR)
                         # readability: country_ip[country_code][1st_ipv4_address]=[num_addresses_in_range]
                         country_ip[curr_line[1]][int(netaddr.IPAddress(curr_line[3]))] = int(curr_line[4])
 
@@ -57,10 +63,6 @@ def read_files():
             except IndexError:
 
                 print "We are in a region of the file we don't need data from anyways, proceed\n"
-
-    print "Finished reading files"
-
-
 
 
 def sort_ranges():
