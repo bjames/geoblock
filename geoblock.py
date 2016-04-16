@@ -20,7 +20,7 @@ def download_files():
 
 def read_files():
 
-    print "Reading files into dictionary\nNot yet implemented\n"
+    print "Reading files into dictionary\n"
 
     # TODO
     # Read files into a datastructure, maybe a dictonary?
@@ -38,12 +38,30 @@ def read_files():
     for f in file_list:
         for line in f:
             curr_line = line.split('|')
-            if curr_line[2] == "ipv4" && curr_line[1] != "*":
 
-                # case if the country is already in the dict, we do not want to overwrite any keys
-                if country_ip.has_key(curr_line[1]):
+            try:
+                if curr_line[2] == "ipv4" and curr_line[1] != "*":
 
-                    country_ip[curr_line[1]].append(curr_line[2])
+                    # case if the country is already in the dict, we do not want to overwrite any keys
+                    if country_ip.has_key(curr_line[1]):
+
+                        # curr_line[1] is the country code, curr_line[3] is the ip address (network id), curr_line[4] is the count of address (not always CIDR) see: https://www.apnic.net/publications/media-library/documents/resource-guidelines/rir-statistics-exchange-format
+                        # readability: country_ip[country_code][1st_ipv4_address]=[num_addresses_in_range]
+                        country_ip[curr_line[1]][curr_line[3]] = curr_line[4]
+
+                    # case if we do not yet have the country code in our nested dict
+                    else:
+
+                        # this creates our first key-value pair for the nested dict of the current country, which tells
+                        # the Python interpreter that we are creating a dictonary
+                        # readability: country_ip[country_code]={1st_ipv4_address:num_addresses_in_range]
+                        country_ip[curr_line[1]]={curr_line[3]:curr_line[4]}
+
+            except IndexError:
+
+                print "Most likely we are in a region of the file we don't need data from anyways, proceed\n"
+
+    print "Finished reading files"
 
 
 
