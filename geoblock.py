@@ -38,7 +38,9 @@ def read_files():
         file_list.append(open(rir))
 
     for f in file_list:
+
         for line in f:
+
             curr_line = line.split('|')
 
             try:
@@ -50,7 +52,7 @@ def read_files():
                         # curr_line[1] is the country code, curr_line[3] is the ip address (network id), curr_line[4]
                         # is the count of address (not always CIDR)
                         # readability: country_ip[country_code][1st_ipv4_address]=[num_addresses_in_range]
-                        country_ip[curr_line[1]][int(netaddr.IPAddress(curr_line[3]))] = int(curr_line[4])
+                        country_ip[curr_line[1]][netaddr.IPAddress(curr_line[3])] = netaddr.IPAddress(int(curr_line[4])-1)
 
                     # case if we do not yet have the country code in our nested dict
                     else:
@@ -58,43 +60,49 @@ def read_files():
                         # this creates our first key-value pair for the nested dict of the current country, which tells
                         # the Python interpreter that we are creating a dictonary
                         # readability: country_ip[country_code]={1st_ipv4_address:num_addresses_in_range]
-                        country_ip[curr_line[1]]={int(netaddr.IPAddress(curr_line[3])):int(curr_line[4])}
+                        country_ip[curr_line[1]]={netaddr.IPAddress(curr_line[3]): netaddr.IPAddress(int(curr_line[4])-1)}
 
             except IndexError:
 
                 print "We are in a region of the file we don't need data from anyways, proceed\n"
 
-
-def sort_ranges():
-
-    print "Sorting IP address\nNot yet implemented\n"
-
-    # TODO
-    # Sort the IP ranges for each key, that way it's easier to aggregate
+    return country_ip
 
 
-def aggregate():
-
-    print "Calculating aggregates\nNot yet implemented\n"
-
-    # Aggregate IP ranges where possible
-
-
-def gen_acl():
+def gen_acl(country_ip):
 
     print "Generating ACL\nNot yet implemented\n"
 
-    # TODO
-    # Generate Cisco IOS ACL
+    # TODO add a mechanism to select which countries to block (or which countries to not block)
+    # Generates Cisco IOS ACL with wildcard bits
+
+    outfile = open('acl.txt', 'w')
+
+    outfile.write('ip access-list extended geoblock\n')
+    outfile.write('remark Generated using geoblock.py\nremark\n')
+
+    # Pretty standard, iterate over our dictionary and output the data to acl.txt
+    for country, ip_dict in country_ip.iteritems():
+
+        outfile.write('remark Block IP ranges from ' + country + '\nremark\n')
+
+        for ip, wildcard in ip_dict.iteritems():
+
+            # deny ip ip_address wildcard_bits
+            outfile.write('deny ip {0} {1}\n'.format(str(ip), str(wildcard)))
+
+        outfile.write('remark\nremark End of IP ranges from ' + country + '\nremark\n')
+
+
 
 
 def main():
 
+    # TODO allow users to set options ex. whether or not to download the latest stats files, or select countries to block
+
     # download_files()
-    read_files()
-    sort_ranges()
-    aggregate()
-    gen_acl()
+    country_ip = read_files()
+    gen_acl(country_ip)
 
     print "Finished!\n"
 
