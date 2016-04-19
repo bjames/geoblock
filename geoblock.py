@@ -2,9 +2,31 @@ import urllib, netaddr
 
 RIRS = ["afrinic", "apnic", "lacnic", "ripe", "arin"]
 
+
 def country_select():
 
-    #
+    # TODO Creates a list of country codes based on user input
+
+    user_input = raw_input("List of countries to [b]lock or to [p]ermit? [p]: ")
+
+    try:
+        if user_input[0] == 'b':
+            permit = False
+        elif user_input[0] == 'p':
+            permit = True
+        else:
+            print "Invalid input\n"
+            return
+
+    # if we get an index error then nothing was entered, so our list is of countries to permit
+    except IndexError:
+
+        permit = True
+
+    user_input = raw_input("List countries using two character ISO3166 code, delimited with whitespace: ").split()
+
+    return user_input, permit
+
 
 def download_files():
 
@@ -17,6 +39,7 @@ def download_files():
     # RIPE and ARIN don't follow the standard format so we had to hardcode the URLs
     urllib.urlretrieve("ftp://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-latest", "ripe")
     urllib.urlretrieve("ftp://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest", "arin")
+
 
 def read_files():
 
@@ -85,7 +108,7 @@ def read_files():
     return country_ip
 
 
-def gen_acl(country_ip):
+def gen_acl(block_list, country_ip, permit):
 
     print "Generating ACL\nNot yet implemented\n"
 
@@ -110,15 +133,14 @@ def gen_acl(country_ip):
         outfile.write('remark\nremark End of IP ranges from ' + country + '\nremark\n')
 
 
-
-
 def main():
 
     # TODO allow users to set options ex. whether or not to download the latest stats files, or select countries to block
 
     # download_files()
+    block_list, permit = country_select()
     country_ip = read_files()
-    gen_acl(country_ip)
+    gen_acl(block_list, country_ip, permit)
 
     print "Finished!\n"
 
