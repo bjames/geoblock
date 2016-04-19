@@ -2,6 +2,9 @@ import urllib, netaddr
 
 RIRS = ["afrinic", "apnic", "lacnic", "ripe", "arin"]
 
+def country_select():
+
+    #
 
 def download_files():
 
@@ -44,15 +47,27 @@ def read_files():
             curr_line = line.split('|')
 
             try:
+
+                # we want only the ipv4 lines that are for a specific country
                 if curr_line[2] == "ipv4" and curr_line[1] != "*":
 
+                    country_code = curr_line[1]
+                    ipv4_addr = netaddr.IPAddress(curr_line[3])
+                    wildcard = netaddr.IPAddress(int(curr_line[4])-1)
+
+                    # ARIN has some addresses listed as 'reserved' that aren't assigned to any country
+                    # it doesn't seem like any of the other RIRs are doing this, but just in case we've handled
+                    # it here. I think the explanation is here: https://www.arin.net/policy/nrpm.html#four10
+                    if country_code == '':
+
+                        country_code = f.name + " reserved"
+
                     # case if the country is already in the dict, we do not want to overwrite any keys
-                    if country_ip.has_key(curr_line[1]):
+                    if country_ip.has_key(country_code):
 
                         # curr_line[1] is the country code, curr_line[3] is the ip address (network id), curr_line[4]
                         # is the count of address (not always CIDR)
-                        # readability: country_ip[country_code][1st_ipv4_address]=[num_addresses_in_range]
-                        country_ip[curr_line[1]][netaddr.IPAddress(curr_line[3])] = netaddr.IPAddress(int(curr_line[4])-1)
+                        country_ip[country_code][ipv4_addr] = wildcard
 
                     # case if we do not yet have the country code in our nested dict
                     else:
@@ -60,11 +75,12 @@ def read_files():
                         # this creates our first key-value pair for the nested dict of the current country, which tells
                         # the Python interpreter that we are creating a dictonary
                         # readability: country_ip[country_code]={1st_ipv4_address:num_addresses_in_range]
-                        country_ip[curr_line[1]]={netaddr.IPAddress(curr_line[3]): netaddr.IPAddress(int(curr_line[4])-1)}
+                        country_ip[country_code]={ipv4_addr: wildcard}
 
             except IndexError:
 
-                print "We are in a region of the file we don't need data from anyways, proceed\n"
+                # some of the lines aren't split into any columns. We don't need data from those anyways.
+                pass
 
     return country_ip
 
