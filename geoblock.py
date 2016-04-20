@@ -5,8 +5,6 @@ RIRS = ["afrinic", "apnic", "lacnic", "ripe", "arin"]
 
 def country_select():
 
-    # TODO Creates a list of country codes based on user input
-
     user_input = raw_input("List of countries to [b]lock or to [p]ermit? [p]: ")
 
     try:
@@ -23,12 +21,14 @@ def country_select():
 
         permit = True
 
-    user_input = raw_input("List countries using two character ISO3166 code, delimited with whitespace: ").split()
+    user_input = (raw_input("List countries using two character ISO3166 code, delimited with whitespace: ").upper()).split()
 
     return user_input, permit
 
 
 def download_files():
+
+    # TODO File download is very slow. Find another method to download the files.
 
     print "Downloading data from RIRs\n"
 
@@ -41,7 +41,7 @@ def download_files():
     urllib.urlretrieve("ftp://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest", "arin")
 
 
-def read_files():
+def read_files(block_list, permit):
 
     print "Reading files into dictionary\n"
 
@@ -72,7 +72,9 @@ def read_files():
             try:
 
                 # we want only the ipv4 lines that are for a specific country
-                if curr_line[2] == "ipv4" and curr_line[1] != "*":
+                # also only want countries that we are going to block
+                if (curr_line[2] == "ipv4" and curr_line[1] != "*") and \
+                ((permit and curr_line[1] not in block_list) or (not permit and curr_line[1] in block_list)):
 
                     country_code = curr_line[1]
                     ipv4_addr = netaddr.IPAddress(curr_line[3])
@@ -96,7 +98,7 @@ def read_files():
                     else:
 
                         # this creates our first key-value pair for the nested dict of the current country, which tells
-                        # the Python interpreter that we are creating a dictonary
+                        # the Python interpreter that we are creating a dictionary
                         # readability: country_ip[country_code]={1st_ipv4_address:num_addresses_in_range]
                         country_ip[country_code]={ipv4_addr: wildcard}
 
@@ -108,9 +110,9 @@ def read_files():
     return country_ip
 
 
-def gen_acl(block_list, country_ip, permit):
+def gen_acl(country_ip):
 
-    print "Generating ACL\nNot yet implemented\n"
+    print "Generating ACL\n"
 
     # TODO add a mechanism to select which countries to block (or which countries to not block)
     # Generates Cisco IOS ACL with wildcard bits
@@ -128,19 +130,17 @@ def gen_acl(block_list, country_ip, permit):
         for ip, wildcard in ip_dict.iteritems():
 
             # deny ip ip_address wildcard_bits
-            outfile.write('deny ip {0} {1}\n'.format(str(ip), str(wildcard)))
+            outfile.write('deny ip {0} {1} any\n'.format(str(ip), str(wildcard)))
 
         outfile.write('remark\nremark End of IP ranges from ' + country + '\nremark\n')
 
 
 def main():
 
-    # TODO allow users to set options ex. whether or not to download the latest stats files, or select countries to block
-
-    # download_files()
+    download_files()
     block_list, permit = country_select()
-    country_ip = read_files()
-    gen_acl(block_list, country_ip, permit)
+    country_ip = read_files(block_list, permit)
+    gen_acl(country_ip)
 
     print "Finished!\n"
 
