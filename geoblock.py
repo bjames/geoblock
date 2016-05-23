@@ -1,5 +1,6 @@
 import urllib2
 import netaddr
+from sortedcontainers import SortedList
 
 # TODO Add a function to take data from http://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.csv
 # and use it to create simple aggregate routes. This is being done in an attempt
@@ -13,6 +14,8 @@ RIRS = [["ftp://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-latest", "af
 
 
 def country_select():
+
+    # TODO implement better input validation
 
     pref = raw_input("List of countries to [b]lock or to [p]ermit? [p]: ")
 
@@ -36,7 +39,7 @@ def country_select():
     return user_input, permit
 
 
-def download_files():
+def download_countryip_files():
 
     print "Downloading data from RIRs\n"
 
@@ -53,7 +56,7 @@ def download_files():
         output.close()
 
 
-def read_files(block_list, permit):
+def read_countryip_files(country_list, permit):
 
     print "Reading files into dictionary\n"
 
@@ -84,8 +87,8 @@ def read_files(block_list, permit):
                 # we want only the ipv4 lines that are for a specific country
                 # also only want countries that we are going to block
                 if (curr_line[2] == "ipv4" and curr_line[1] != "*") and \
-                    ((permit and curr_line[1] not in block_list) or
-                     (not permit and curr_line[1] in block_list)):
+                    ((permit and curr_line[1] not in country_list) or
+                     (not permit and curr_line[1] in country_list)):
 
                     country_code = curr_line[1]
                     ipv4_addr = netaddr.IPAddress(curr_line[3])
@@ -119,7 +122,7 @@ def read_files(block_list, permit):
     return country_ip
 
 
-def gen_acl(country_ip):
+def gen_countryip_acl(country_ip):
 
     # Generates Cisco IOS ACL with wildcard bits
 
@@ -145,11 +148,9 @@ def gen_acl(country_ip):
                       country + '\nremark\n')
 
 
-def download_slash_eight():
+def download_slasheight():
 
-    # TODO download csv file from IANA page
-
-    inet_file = urllib2.urlopen(http://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.csv)
+    inet_file = urllib2.urlopen("http://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.csv")
 
     with open("iana", 'w') as output:
 
@@ -157,40 +158,124 @@ def download_slash_eight():
 
     output.close()
 
-def rir_acl_gen():
+
+def rir_select():
+
+    # TODO implement better input validation
+
+    pref = raw_input("List of RIRs to [b]lock or to [p]ermit? [p]: ")
+
+    try:
+        if pref[0] == 'b':
+            permit = False
+        elif pref[0] == 'p':
+            permit = True
+        else:
+            print "Invalid input\n"
+            return
+
+    # if we get an index error then nothing was entered
+    except IndexError:
+
+        permit = True
+
+    print "Select RIRs from list, separated by a space"
+    user_input = (raw_input("ARIN, RIPE, AFRINIC, APNIC, LACNIC: ").lower()).split()
+
+    # validate user input
+    for word in user_input:
+
+        if(word != "arin" and word != "ripe" and word != "afrinic" and
+            word != "apnic" and word != "lacnic"):
+            print "Invalid input"
+
+    return user_input, permit
+
+
+def rir_gen_ip_list(user_rir_list):
 
     # TODO take the list of RIRs that we are blocking and create a list of /8s
     # to block
 
-    pass
+    rir_slasheight_list = SortedList()
 
+    iana_file = open("iana")
 
-def rir_list():
+    for line in iana_file:
+
+        curr_line = line.split(',')
+
+        for rir in user_rir_list:
+
+            # case in which the whois line from our csv contains the RIR
+            if rir in curr_line[3]:
+                ip_address = curr_line[0][:3].lstrip('0') + ".0.0.0"
+                rir_slasheight_list.add(netaddr.IPAddress(ip_address))
+                break
+
+    return rir_slasheight_list
+
+def rir_gen_acl(rir_slasheight_list):
 
     # TODO take the list of countries we are blocking and see if we can simply
     # block the /8s that are assigned to that RIR. Function will return a list
     # of RIRs
 
+    outfile = open('acl.txt', 'w')
+
+    outfile.write('ip access-list extended geoblock\n')
+    outfile.write('remark Generated using geoblock.py\nremark\n')
+
+    for network in rir_slasheight_list:
+        outfile.write('deny ip {0} 0.255.255.255 any\n'.format(str(network)))
+
+def block_by_country():
+
+    download_countryip_files()
+    country_list, permit = country_select()
+    country_ip = read_countryip_files(country_list, permit)
+    gen_countryip_acl(country_ip)
+    print "Finished! ACL output to acl.txt"
+
+
+def block_by_RIR():
+
+    download_slasheight()
+    user_rir_list, permit = rir_select()
+    rir_slasheight_list = rir_gen_ip_list(user_rir_list)
+    rir_gen_acl(rir_slasheight_list)
+    print "Finished! ACL output to acl.txt"
+
+
+def block_by_hybrid():
+
     pass
-
-
-def menu():
-
-    print "1. Block by country"
-    print "2. Block by RIR /8"
-    print "3. Hybrid"
-
-    selection = raw_input("Input Selection: ")
 
 
 def main():
 
-    download_files()
-    block_list, permit = country_select()
-    country_ip = read_files(block_list, permit)
-    gen_acl(country_ip)
+    finished = False
 
-    print "Finished!\n"
+    while(not finished):
+
+        print "1. Block by country"
+        print "2. Block by RIR /8"
+        print "3. Hybrid"
+        print "4. Quit"
+
+        selection = raw_input("Input Selection: ")
+        if(selection == '1'):
+            block_by_country()
+        elif(selection == '2'):
+            block_by_RIR()
+        elif(selection == '3'):
+            block_by_hybrid()
+        elif(selection == '4'):
+            finished = True
+        else:
+            print "Invalid input, please enter an int 1-4"
+
+    print "Goodbye!"
 
 
 main()
