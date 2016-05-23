@@ -1,6 +1,10 @@
 import urllib2
 import netaddr
 
+# TODO Add a function to take data from http://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.csv
+# and use it to create simple aggregate routes. This is being done in an attempt
+# to decrease ACL size
+
 RIRS = [["ftp://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-latest", "afrinic"],
         ["ftp://ftp.apnic.net/pub/stats/apnic/delegated-apnic-latest", "apnic"],
         ["ftp://ftp.lacnic.net/pub/stats/lacnic/delegated-lacnic-latest", "lacnic"],
@@ -97,7 +101,7 @@ def read_files(block_list, permit):
                         country_code = f.name + " reserved"
 
                     # key is already in our dict
-                    if country_ip.has_key(country_code):
+                    if(country_code in country_ip):
 
                         country_ip[country_code][ipv4_addr] = wildcard
 
@@ -139,6 +143,44 @@ def gen_acl(country_ip):
 
         outfile.write('remark\nremark End of IP ranges from ' +
                       country + '\nremark\n')
+
+
+def download_slash_eight():
+
+    # TODO download csv file from IANA page
+
+    inet_file = urllib2.urlopen(http://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.csv)
+
+    with open("iana", 'w') as output:
+
+        output.write(inet_file.read())
+
+    output.close()
+
+def rir_acl_gen():
+
+    # TODO take the list of RIRs that we are blocking and create a list of /8s
+    # to block
+
+    pass
+
+
+def rir_list():
+
+    # TODO take the list of countries we are blocking and see if we can simply
+    # block the /8s that are assigned to that RIR. Function will return a list
+    # of RIRs
+
+    pass
+
+
+def menu():
+
+    print "1. Block by country"
+    print "2. Block by RIR /8"
+    print "3. Hybrid"
+
+    selection = raw_input("Input Selection: ")
 
 
 def main():
