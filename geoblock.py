@@ -12,6 +12,17 @@ RIRS = [["ftp://ftp.afrinic.net/pub/stats/afrinic/delegated-afrinic-latest", "af
         ["ftp://ftp.ripe.net/pub/stats/ripencc/delegated-ripencc-latest", "ripe"],
         ["ftp://ftp.arin.net/pub/stats/arin/delegated-arin-extended-latest", "arin"]]
 
+RIR_NAMES = rir_list = ["afrinic", "apnic", "lacnic", "ripe", "arin"]
+
+def floor_log2(n):
+    assert n > 0
+    last = n
+    n &= n - 1
+    while n:
+        last = n
+        n &= n - 1
+    return last
+
 
 def country_select():
 
@@ -56,25 +67,16 @@ def download_countryip_files():
         output.close()
 
 
-def read_countryip_files(country_list, permit):
-
-    print "Reading files into dictionary\n"
-
-    # Reads file contents into a nested dictionary
-    # The form of the dictionary is {Key_1, {Key_2: Value}}
-    # where Key_1 is the Country Code, Key_2 is the IP Address as an integer
-    # and the value is the number of IP address in the range
-    # ex {'us', {823564: 1024}} Note: Those are just random numbers I typed
+def read_countryip_files(country_list, permit, rir_list = RIR_NAMES):
 
     # list containing our file objects
     file_list = []
 
-    # nested dictionary used to store our countries and IP addresses
-    country_ip = {}
+    country_ip = SortedList()
 
     # Open the files we downloaded earlier and store the file object
-    for rir in RIRS:
-        file_list.append(open(rir[1]))
+    for rir in rir_list:
+        file_list.append(open(rir))
 
     for f in file_list:
 
@@ -91,27 +93,21 @@ def read_countryip_files(country_list, permit):
                      (not permit and curr_line[1] in country_list)):
 
                     country_code = curr_line[1]
-                    ipv4_addr = netaddr.IPAddress(curr_line[3])
-                    wildcard = netaddr.IPAddress(int(curr_line[4])-1)
+                    network_id = curr_line[3]
+                    wildcard = int(curr_line[4])-1
 
-                    # ARIN has some addresses listed as 'reserved' that aren't
-                    # assigned to any country it doesn't seem like any of the
-                    # other RIRs are doing this, but just in case we've handled
-                    # it here. explanation is here:
-                    # https://www.arin.net/policy/nrpm.html#four10
-                    if country_code == '':
 
-                        country_code = f.name + " reserved"
+                    try:
 
-                    # key is already in our dict
-                    if(country_code in country_ip):
+                        country_ip.add(netaddr.IPNetwork((network_id) + "/" + str(netaddr.IPAddress(wildcard))))
 
-                        country_ip[country_code][ipv4_addr] = wildcard
+                    except netaddr.AddrFormatError:
 
-                    # key is not in our dict
-                    else:
+                        print "rounded network " + network_id + " with " + str(wildcard) + " hosts down to nearest power of 2"
+                        wildcard = floor_log2(wildcard) - 1
+                        print wildcard
+                        country_ip.add(netaddr.IPNetwork((network_id) + "/" + str(netaddr.IPAddress(wildcard))))
 
-                        country_ip[country_code] = {ipv4_addr: wildcard}
 
             except IndexError:
 
@@ -119,33 +115,31 @@ def read_countryip_files(country_list, permit):
                 # those don't have any data we need anyways
                 pass
 
+    country_ip = netaddr.cidr_merge(country_ip)
+
     return country_ip
 
 
-def gen_countryip_acl(country_ip):
+def gen_countryip_acl(country_ip, file_oper = 'w'):
 
     # Generates Cisco IOS ACL with wildcard bits
 
     print "Generating ACL\n"
 
-    outfile = open('acl.txt', 'w')
+    outfile = open('acl.txt', file_oper)
 
-    outfile.write('ip access-list extended geoblock\n')
-    outfile.write('remark Generated using geoblock.py\nremark\n')
+    if(file_oper == 'w'):
+        outfile.write('ip access-list extended geoblock\n')
+        outfile.write('remark Generated using geoblock.py\nremark\n')
 
     # iterate over our dictionary and output the data to acl.txt
-    for country, ip_dict in country_ip.iteritems():
+    for network in country_ip:
 
-        outfile.write('remark Block IP ranges from ' + country + '\nremark\n')
+        # deny ip ip_address wildcard_bits
+        outfile.write(' deny ip {0} {1} any\n'.format((str(network.ip)), str(network.hostmask)))
 
-        for ip, wildcard in ip_dict.iteritems():
-
-            # deny ip ip_address wildcard_bits
-            outfile.write('deny ip {0} {1} any\n'.format(str(ip),
-                          str(wildcard)))
-
-        outfile.write('remark\nremark End of IP ranges from ' +
-                      country + '\nremark\n')
+    outfile.write(' remark IPs blocked by country\n')
+    outfile.close()
 
 
 def download_slasheight():
@@ -163,23 +157,7 @@ def rir_select():
 
     # TODO implement better input validation
 
-    pref = raw_input("List of RIRs to [b]lock or to [p]ermit? [p]: ")
-
-    try:
-        if pref[0] == 'b':
-            permit = False
-        elif pref[0] == 'p':
-            permit = True
-        else:
-            print "Invalid input\n"
-            return
-
-    # if we get an index error then nothing was entered
-    except IndexError:
-
-        permit = True
-
-    print "Select RIRs from list, separated by a space"
+    print "Select RIRs to BLOCK from list, separated by a space"
     user_input = (raw_input("ARIN, RIPE, AFRINIC, APNIC, LACNIC: ").lower()).split()
 
     # validate user input
@@ -189,7 +167,7 @@ def rir_select():
             word != "apnic" and word != "lacnic"):
             print "Invalid input"
 
-    return user_input, permit
+    return user_input
 
 
 def rir_gen_ip_list(user_rir_list):
@@ -217,6 +195,7 @@ def rir_gen_ip_list(user_rir_list):
 
     return rir_slasheight_list
 
+
 def rir_gen_acl(rir_slasheight_list):
 
     # TODO take the list of countries we are blocking and see if we can simply
@@ -231,28 +210,82 @@ def rir_gen_acl(rir_slasheight_list):
     for network in rir_slasheight_list:
         outfile.write(' deny ip {0} {1} any\n'.format((str(network.ip)), str(network.hostmask)))
 
+    outfile.write(' remark IPs blocked by RIR\n')
+
+    outfile.close()
+
+def find_matching_rirs(country_list, permit):
+
+    rir_list = []
+    file_list = []
+
+    for rir in RIRS:
+
+        file_list.append(open(rir[1]))
+
+    for f in file_list:
+
+        countries_in_file = []
+
+        for line in f:
+
+            curr_line = line.split('|')
+
+            try:
+
+                country = curr_line[1]
+
+                if(curr_line[0][0] != '2' and country != '*' and country not in countries_in_file):
+
+                    countries_in_file.append(country)
+
+            except IndexError:
+
+                pass
+
+        if(not permit and (set(countries_in_file) <= set(country_list))):
+
+            rir_list.append(f.name)
+
+        elif(permit and not set(countries_in_file) >= set(country_list)):
+
+            print f.name
+            rir_list.append(f.name)
+
+    return rir_list
+
+
+def gen_hybrid_acl(rir_list, country_list, permit):
+
+    rir_slasheight_list = rir_gen_ip_list(rir_list)
+    rir_gen_acl(rir_slasheight_list)
+    country_ip = read_countryip_files(country_list, permit, set(RIR_NAMES) - set(rir_list))
+    gen_countryip_acl(country_ip, 'a')
+
 
 def block_by_country():
 
-    download_countryip_files()
+    #download_countryip_files()
     country_list, permit = country_select()
     country_ip = read_countryip_files(country_list, permit)
     gen_countryip_acl(country_ip)
-    print "Finished! ACL output to acl.txt"
 
 
 def block_by_RIR():
 
-    download_slasheight()
-    user_rir_list, permit = rir_select()
+    #download_slasheight()
+    user_rir_list = rir_select()
     rir_slasheight_list = rir_gen_ip_list(user_rir_list)
     rir_gen_acl(rir_slasheight_list)
-    print "Finished! ACL output to acl.txt"
 
 
 def block_by_hybrid():
 
-    pass
+    #download_slasheight()
+    #download_countryip_files()
+    country_list, permit = country_select()
+    rir_block_list = find_matching_rirs(country_list, permit)
+    gen_hybrid_acl(rir_block_list, country_list, permit)
 
 
 def main():
