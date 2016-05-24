@@ -216,41 +216,56 @@ def rir_gen_acl(rir_slasheight_list):
 
 def find_matching_rirs(country_list, permit):
 
+    arin = []
+    afrinic = []
+    apnic = []
+    lacnic = []
+    ripe = []
     rir_list = []
-    file_list = []
 
-    for rir in RIRS:
+    country_code_rir_file = open("country_codes.csv", 'r')
 
-        file_list.append(open(rir[1]))
+    for line in country_code_rir_file:
 
-    for f in file_list:
+        line = line.split(',')
 
-        countries_in_file = []
+        if(line[3] == "ARIN\n"):
+            arin.append(line[1])
+        elif(line[3] == "AFRINIC\n"):
+            afrinic.append(line[1])
+        elif(line[3] == "APNIC\n"):
+            apnic.append(line[1])
+        elif(line[3] == "LACNIC\n"):
+            lacnic.append(line[1])
+        elif(line[3] == "RIPE NCC\n"):
+            ripe.append(line[1])
 
-        for line in f:
+    if(permit):
+        if(not set(country_list) <= set(arin)):
+            rir_list.append("arin")
+        if(not set(country_list) <= set(afrinic)):
+            rir_list.append("afrinic")
+        if(not set(country_list) <= set(apnic)):
+            rir_list.append("apnic")
+        if(not set(country_list) <= set(lacnic)):
+            rir_list.append("lacnic")
+        if(not set(country_list) <= set(ripe)):
+            rir_list.append("ripe")
+    else:
+        if(set(country_list) >= set(arin)):
+            rir_list.append("arin")
+        if(set(country_list) >= set(afrinic)):
+            rir_list.append("afrinic")
+        if(set(country_list) >= set(apnic)):
+            rir_list.append("apnic")
+        if(set(country_list) >= set(lacnic)):
+            rir_list.append("lacnic")
+        if(set(country_list) >= set(ripe)):
+            rir_list.append("ripe")
 
-            curr_line = line.split('|')
+    country_code_rir_file.close()
 
-            try:
-
-                country = curr_line[1]
-
-                if(curr_line[0][0] != '2' and country != '*' and country not in countries_in_file):
-
-                    countries_in_file.append(country)
-
-            except IndexError:
-
-                pass
-
-        if(not permit and (set(countries_in_file) <= set(country_list))):
-
-            rir_list.append(f.name)
-
-        elif(permit and not set(countries_in_file) >= set(country_list)):
-
-            print f.name
-            rir_list.append(f.name)
+    print rir_list
 
     return rir_list
 
