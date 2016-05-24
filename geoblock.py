@@ -209,9 +209,11 @@ def rir_gen_ip_list(user_rir_list):
 
             # case in which the whois line from our csv contains the RIR
             if rir in curr_line[3]:
-                ip_address = curr_line[0][:3].lstrip('0') + ".0.0.0"
-                rir_slasheight_list.add(netaddr.IPAddress(ip_address))
+                network = curr_line[0].lstrip('0')
+                rir_slasheight_list.add(netaddr.IPNetwork(network))
                 break
+
+    rir_slasheight_list = netaddr.cidr_merge(rir_slasheight_list)
 
     return rir_slasheight_list
 
@@ -224,10 +226,11 @@ def rir_gen_acl(rir_slasheight_list):
     outfile = open('acl.txt', 'w')
 
     outfile.write('ip access-list extended geoblock\n')
-    outfile.write('remark Generated using geoblock.py\nremark\n')
+    outfile.write(' remark Generated using geoblock.py\n remark\n')
 
     for network in rir_slasheight_list:
-        outfile.write('deny ip {0} 0.255.255.255 any\n'.format(str(network)))
+        outfile.write(' deny ip {0} {1} any\n'.format((str(network.ip)), str(network.hostmask)))
+
 
 def block_by_country():
 
