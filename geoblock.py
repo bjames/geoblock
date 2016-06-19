@@ -1,5 +1,6 @@
 import urllib2
 import netaddr
+import csv
 import os.path
 from sortedcontainers import SortedList
 
@@ -13,6 +14,7 @@ RIR_NAMES = ["afrinic", "apnic", "lacnic", "ripe", "arin"]
 
 # TODO Implement a method that permits the counties listed and then denies all other networks
 # TODO Adjust variable and function names to better represent the purpose of the variable or function
+
 
 def floor_log2(n):
 
@@ -198,6 +200,8 @@ def read_rirs(country_list, permit, rir_list=RIR_NAMES):
 
                 pass
 
+        f.close()
+
     # cidr_merge takes our list of IPs and summarizes subnets where possible
     # this greatly decreases the number of ACL entries
     rir_ips = netaddr.cidr_merge(rir_ips)
@@ -234,23 +238,25 @@ def iana_rir_gen_ip_list(user_rir_list):
     # we use a SortedList so that elements are inserted in order. This allows cidr_merge to work
     rir_slash_eight_list = SortedList()
 
-    iana_file = open("iana")
+    with open('iana') as iana_file:
 
-    for line in iana_file:
+        iana_csv = csv.reader(iana_file)
 
-        curr_line = line.split(',')
+        for line in iana_csv:
 
-        for rir in user_rir_list:
+            for rir in user_rir_list:
 
-            # case in which the whois line from our csv contains the RIR
-            if rir in curr_line[3]:
-                network = curr_line[0].lstrip('0')
-                rir_slash_eight_list.add(netaddr.IPNetwork(network))
-                # if we find a match, there is no reason to see if the other RIRs are on the same line
-                break
+                # case in which the whois line from our csv contains the RIR
+                if rir in line[3]:
 
-    # run cidr_merge to summarize
-    rir_slash_eight_list = netaddr.cidr_merge(rir_slash_eight_list)
+                    network = line[0].lstrip('0')
+                    rir_slash_eight_list.add(netaddr.IPNetwork(network))
+
+                    # if we find a match, there is no reason to see if the other RIRs are on the same line
+                    break
+
+        # run cidr_merge to summarize
+        rir_slash_eight_list = netaddr.cidr_merge(rir_slash_eight_list)
 
     return rir_slash_eight_list
 
@@ -261,42 +267,41 @@ def gen_rir_acl(country_ip, file_oper ='w'):
 
     print "Generating ACL\n"
 
-    outfile = open('acl.txt', file_oper)
+    with open("acl.txt", file_oper) as outfile:
 
-    if file_oper == 'w':
-        outfile.write('ip access-list extended geoblock\n')
-        outfile.write('remark Generated using geoblock.py\n remark IPs blocked by country\n remark')
+        if file_oper == 'w':
+            outfile.write('ip access-list extended geoblock\n remark Generated using geoblock.py\n')
 
-    # iterate over our dictionary and output the data to acl.txt
-    for network in country_ip:
+        outfile.write(' remark networks blocked by country\n')
 
-        # deny ip ip_address wildcard_bits
-        outfile.write(' deny ip {0} {1} any\n'.format((str(network.ip)), str(network.hostmask)))
+        # iterate over our dictionary and output the data to acl.txt
+        for network in country_ip:
 
-    outfile.write(' remark end IPs blocked by country\n')
-    outfile.close()
+            # deny ip ip_address wildcard_bits
+            outfile.write(' deny ip {0} {1} any\n'.format((str(network.ip)), str(network.hostmask)))
+
+        outfile.write(' remark end IPs blocked by country\n')
 
 
 def iana_rir_gen_acl(rir_slasheight_list):
 
     # output our list of RIR networks we are blocking to a Cisco ACL
 
-    outfile = open('acl.txt', 'w')
+    with open('acl.txt', 'w') as outfile:
 
-    outfile.write('ip access-list extended geoblock\n')
-    outfile.write(' remark Generated using geoblock.py\n remark IPs blocked by RIR\n remark\n')
+        outfile.write('ip access-list extended geoblock\n')
+        outfile.write(' remark Generated using geoblock.py\n remark networks blocked by RIR\n')
 
-    for network in rir_slasheight_list:
-        outfile.write(' deny ip {0} {1} any\n'.format((str(network.ip)), str(network.hostmask)))
+        for network in rir_slasheight_list:
+            outfile.write(' deny ip {0} {1} any\n'.format((str(network.ip)), str(network.hostmask)))
 
-    outfile.write(' remark end IPs blocked by RIR\n')
-
-    outfile.close()
+        outfile.write(' remark end IPs blocked by RIR\n')
 
 
 def find_matching_rirs(country_list, permit):
 
     # function takes a list of countries that we are either permitting or denying and outputs a list of RIRs
+    # csv file is from https://www.nro.net/about-the-nro/list-of-country-codes-and-rirs-ordered-by-country-code
 
     # not crazy about the way I hardcoded these sets, may try and find a better solution down the road
     arin = set()
@@ -304,53 +309,52 @@ def find_matching_rirs(country_list, permit):
     apnic = set()
     lacnic = set()
     ripe = set()
+    country_set = set(country_list)
     rir_list = []
 
-    country_code_rir_file = open("country_codes.csv", 'r')
+    with open("country_codes.csv", 'r') as country_code_rir_file:
 
-    for line in country_code_rir_file:
+        country_code_rir_csv = csv.reader(country_code_rir_file)
 
-        line = line.split(',')
+        for line in country_code_rir_csv:
 
-        # read each country in the country_codes.csv into the array for the RIR it falls under
-        if line[3] == "ARIN\n":
-            arin.add(line[1])
-        elif line[3] == "AFRINIC\n":
-            afrinic.add(line[1])
-        elif line[3] == "APNIC\n":
-            apnic.add(line[1])
-        elif line[3] == "LACNIC\n":
-            lacnic.add(line[1])
-        elif line[3] == "RIPE NCC\n":
-            ripe.add(line[1])
+            # read each country in the country_codes.csv into the array for the RIR it falls under
+            if line[3] == "ARIN":
+                arin.add(line[1])
+            elif line[3] == "AFRINIC":
+                afrinic.add(line[1])
+            elif line[3] == "APNIC":
+                apnic.add(line[1])
+            elif line[3] == "LACNIC":
+                lacnic.add(line[1])
+            elif line[3] == "RIPE NCC":
+                ripe.add(line[1])
 
-    # if we listed the countries we would like to PERMIT,
-    # then we block the RIRs in which our country_list and the RIR set are disjoint
-    if permit:
-        if not set(country_list) & arin:
-            rir_list.append("arin")
-        if not set(country_list) & afrinic:
-            rir_list.append("afrinic")
-        if not set(country_list) & apnic:
-            rir_list.append("apnic")
-        if not set(country_list) & lacnic:
-            rir_list.append("lacnic")
-        if not set(country_list) & ripe:
-            rir_list.append("ripe")
-    # otherwise, we block the RIRs that contain ALL of the countries we listed (definitely an edge case)
-    else:
-        if set(country_list) == arin:
-            rir_list.append("arin")
-        if set(country_list) == afrinic:
-            rir_list.append("afrinic")
-        if set(country_list) == apnic:
-            rir_list.append("apnic")
-        if set(country_list) == lacnic:
-            rir_list.append("lacnic")
-        if set(country_list) == ripe:
-            rir_list.append("ripe")
-
-    country_code_rir_file.close()
+        # if we listed the countries we would like to PERMIT,
+        # then we block the RIRs in which our country_list and the RIR set are disjoint
+        if permit:
+            if not country_set & arin:
+                rir_list.append("arin")
+            if not country_set & afrinic:
+                rir_list.append("afrinic")
+            if not country_set & apnic:
+                rir_list.append("apnic")
+            if not country_set & lacnic:
+                rir_list.append("lacnic")
+            if not country_set & ripe:
+                rir_list.append("ripe")
+        # otherwise, we block the RIRs that are subsets of the country set(definitely an edge case)
+        else:
+            if country_set >= arin:
+                rir_list.append("arin")
+            if country_set >= afrinic:
+                rir_list.append("afrinic")
+            if country_set >= apnic:
+                rir_list.append("apnic")
+            if country_set >= lacnic:
+                rir_list.append("lacnic")
+            if country_set >= ripe:
+                rir_list.append("ripe")
 
     return rir_list
 
@@ -361,6 +365,9 @@ def gen_hybrid_acl(rir_list, country_list, permit):
     # generate a list of IPs for the RIRs that we blocking, then generate our ACLs
     rir_slasheight_list = iana_rir_gen_ip_list(rir_list)
     iana_rir_gen_acl(rir_slasheight_list)
+
+    # works by only opening the RIR files that we did not block outright
+    # we still iterate over our complete list of countries
     country_ip = read_rirs(country_list, permit, set(RIR_NAMES) - set(rir_list))
 
     # append the acl we created earlier with our country specific blocks
