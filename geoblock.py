@@ -192,7 +192,7 @@ def read_rirs(country_list, permit, rir_list=RIR_NAMES):
                         print "rounded network " + network_id + " with " + str(wildcard) + \
                               " hosts up to nearest power of 2"
                         wildcard = next_power_of_2(wildcard) - 1
-                        print wildcard
+                        print wildcard + 1
                         rir_ips.add(netaddr.IPNetwork(network_id + "/" + str(netaddr.IPAddress(wildcard))))
 
             # IndexErrors only occur when parsing columns we don't need
@@ -298,6 +298,14 @@ def iana_rir_gen_acl(rir_slasheight_list):
         outfile.write(' remark end IPs blocked by RIR\n')
 
 
+def write_last_acl_line():
+
+    # writes last line to the ACL
+
+    with open('acl.txt', 'a') as outfile:
+
+        outfile.write(' permit ip any any\n')
+
 def find_matching_rirs(country_list, permit):
 
     # function takes a list of countries that we are either permitting or denying and outputs a list of RIRs
@@ -383,6 +391,7 @@ def block_by_country():
     country_list, permit = country_select()
     country_ip = read_rirs(country_list, permit)
     gen_rir_acl(country_ip)
+    write_last_acl_line()
 
 
 def block_by_rir():
@@ -394,6 +403,7 @@ def block_by_rir():
     user_rir_list = rir_select()
     rir_slasheight_list = iana_rir_gen_ip_list(user_rir_list)
     iana_rir_gen_acl(rir_slasheight_list)
+    write_last_acl_line()
 
 
 def block_by_hybrid():
@@ -412,6 +422,7 @@ def block_by_hybrid():
     country_list, permit = country_select()
     rir_block_list = find_matching_rirs(country_list, permit)
     gen_hybrid_acl(rir_block_list, country_list, permit)
+    write_last_acl_line()
 
 
 def main():
